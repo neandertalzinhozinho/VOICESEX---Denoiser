@@ -1,0 +1,540 @@
+{
+  "pid": 20688,
+  "timestamp": "20261023T204624",
+  "B": 512,
+  "code_checks": {
+    "0x300070": {
+      "length": 15,
+      "identical": true
+    },
+    "0x2026fe0": {
+      "length": 88,
+      "identical": true
+    },
+    "0x24cd3e0": {
+      "length": 451,
+      "identical": true
+    },
+    "0x2025b30": {
+      "length": 384,
+      "identical": true
+    }
+  },
+  "addresses": {
+    "interface": "0x1e495780d28",
+    "root": "0x1e495780b50",
+    "state": "0x1e4958d7390"
+  },
+  "input_descriptor": {
+    "valid": true,
+    "capacity": 2048,
+    "index_plus8": 832,
+    "index_plus16": 0,
+    "channels": 2,
+    "gap_modulo": 1216,
+    "channel_pointers": [
+      "0x1e49570dcc0",
+      "0x1e495711cc0"
+    ]
+  },
+  "output_descriptor": {
+    "valid": true,
+    "capacity": 2048,
+    "index_plus8": 1856,
+    "index_plus16": 0,
+    "channels": 2,
+    "gap_modulo": 192,
+    "channel_pointers": [
+      "0x1e49570dcc0",
+      "0x1e495711cc0"
+    ]
+  },
+  "phase_F": 320,
+  "extra_field": 1024,
+  "wrapper_count": 2,
+  "wrapper_snapshots": [
+    {
+      "wrapper": "0x5b4d461cc80",
+      "snapshot_keys": [
+        "voice",
+        "df_hist",
+        "low_df",
+        "erb_hist",
+        "high_erb",
+        "erb_alignment",
+        "df_input_history",
+        "df_fft_input",
+        "erb_input_history",
+        "erb_fft_input"
+      ],
+      "arrays": {
+        "df_input_history": {
+          "shape": [
+            512
+          ],
+          "dtype": "float32",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "erb_input_history": {
+          "shape": [
+            128
+          ],
+          "dtype": "float32",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "voice": {
+          "shape": [
+            512
+          ],
+          "dtype": "float64",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "df_hist": {
+          "shape": [
+            768
+          ],
+          "dtype": "float64",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "low_df": {
+          "shape": [
+            512
+          ],
+          "dtype": "float64",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "erb_hist": {
+          "shape": [
+            768
+          ],
+          "dtype": "float64",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "high_erb": {
+          "shape": [
+            512
+          ],
+          "dtype": "float64",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    {
+      "wrapper": "0x5b4d461da80",
+      "snapshot_keys": [
+        "voice",
+        "df_hist",
+        "low_df",
+        "erb_hist",
+        "high_erb",
+        "erb_alignment",
+        "df_input_history",
+        "df_fft_input",
+        "erb_input_history",
+        "erb_fft_input"
+      ],
+      "arrays": {
+        "df_input_history": {
+          "shape": [
+            512
+          ],
+          "dtype": "float32",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "erb_input_history": {
+          "shape": [
+            128
+          ],
+          "dtype": "float32",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "voice": {
+          "shape": [
+            512
+          ],
+          "dtype": "float64",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "df_hist": {
+          "shape": [
+            768
+          ],
+          "dtype": "float64",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "low_df": {
+          "shape": [
+            512
+          ],
+          "dtype": "float64",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "erb_hist": {
+          "shape": [
+            768
+          ],
+          "dtype": "float64",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "high_erb": {
+          "shape": [
+            512
+          ],
+          "dtype": "float64",
+          "nonzero_count": 0,
+          "all_zero": true,
+          "sample_first_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sample_last_10": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    }
+  ],
+  "limitation": "Esta observação captura o estado imediatamente antes da primeira chamada h.process(). Não observa o estado dentro do caminho de processamento (durante FFT/inferência). As janelas temporais exatas antes das primeiras FFTs permanecem desconhecidas."
+}

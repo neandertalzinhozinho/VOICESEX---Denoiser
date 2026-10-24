@@ -15,8 +15,8 @@ void parameter(juce::AudioProcessor& p,const juce::String& name,float value) {
     throw std::runtime_error("Missing parameter");
 }
 
-std::vector<float> render(juce::AudioProcessor& p,const std::vector<float>& x,int block,bool realtime) {
-    p.setNonRealtime(!realtime);p.prepareToPlay(48000,block);
+std::vector<float> render(juce::AudioProcessor& p,const std::vector<float>& x,int block,bool realtime,double rate=48000.0) {
+    p.setNonRealtime(!realtime);p.prepareToPlay(rate,block);
     std::vector<float> y(x.size());juce::MidiBuffer midi;
     auto start=std::chrono::steady_clock::now();
     for(size_t pos=0;pos<x.size();) {
@@ -30,7 +30,7 @@ std::vector<float> render(juce::AudioProcessor& p,const std::vector<float>& x,in
             y[pos+i]=b.getSample(0,i);
         }
         pos+=n;
-        if(realtime) std::this_thread::sleep_until(start+std::chrono::microseconds(int64_t(pos)*1000000/48000));
+        if(realtime) std::this_thread::sleep_until(start+std::chrono::microseconds(int64_t(pos)*1000000/int64_t(rate)));
     }
     return y;
 }
@@ -84,11 +84,54 @@ int soak(juce::AudioProcessor& p,const char* source,const char* report) {
     p.releaseResources();return passed?0:1;
 }
 
+int renderFile(juce::AudioProcessor& p, double rate, int block, float noise, float voice, float bypass, const char* inPath, const char* outPath) {
+    juce::AudioFormatManager formats; formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(juce::File(inPath)));
+    if (!reader) { std::cerr << "Cannot open " << inPath << std::endl; return 1; }
+    int numSamples = int(reader->lengthInSamples);
+    int channels = std::clamp(int(reader->numChannels), 1, 2);
+    juce::AudioBuffer<float> inBuf(2, numSamples);
+    reader->read(&inBuf, 0, numSamples, 0, true, true);
+    if (channels == 1) inBuf.copyFrom(1, 0, inBuf, 0, 0, numSamples);
+
+    parameter(p, "noise", noise);
+    parameter(p, "voice", voice);
+    parameter(p, "bypass", bypass);
+
+    p.setNonRealtime(true);
+    p.prepareToPlay(rate, block);
+
+    juce::AudioBuffer<float> outBuf(2, numSamples);
+    juce::AudioBuffer<float> blockBuf(2, block);
+    juce::MidiBuffer midi;
+
+    for (int pos = 0; pos < numSamples; ) {
+        int n = std::min(block, numSamples - pos);
+        blockBuf.setSize(2, n, false, false, true);
+        for (int c = 0; c < 2; ++c) blockBuf.copyFrom(c, 0, inBuf, c, pos, n);
+        p.processBlock(blockBuf, midi);
+        for (int c = 0; c < 2; ++c) outBuf.copyFrom(c, pos, blockBuf, c, 0, n);
+        pos += n;
+    }
+    p.releaseResources();
+
+    juce::File outFile(outPath);
+    if (outFile.exists()) outFile.deleteFile();
+    auto os = outFile.createOutputStream();
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::AudioFormatWriter> writer(wav.createWriterFor(os.release(), rate, 2, 24, {}, 0));
+    if (!writer) { std::cerr << "Cannot create output " << outPath << std::endl; return 2; }
+    writer->writeFromAudioSampleBuffer(outBuf, 0, numSamples);
+    std::cout << "Rendered " << numSamples << " samples at " << rate << " Hz to " << outPath << " (latency=" << p.getLatencySamples() << ")" << std::endl;
+    return 0;
+}
+
 int main(int argc,char** argv) {
     try {
         juce::ScopedJuceInitialiser_GUI init;
         std::unique_ptr<juce::AudioProcessor> p(createPluginFilter());
         if(argc==4 && juce::String(argv[1])=="--soak") return soak(*p,argv[2],argv[3]);
+        if(argc==9 && juce::String(argv[1])=="--render") return renderFile(*p, std::stod(argv[2]), std::stoi(argv[3]), std::stof(argv[4]), std::stof(argv[5]), std::stof(argv[6]), argv[7], argv[8]);
         if(argc==2) {
             std::unique_ptr<juce::AudioProcessorEditor> editor(p->createEditor());
             editor->setVisible(true);
@@ -101,7 +144,7 @@ int main(int argc,char** argv) {
             auto output=file.createOutputStream();juce::PNGImageFormat png;
             return output && png.writeImageToStream(image,*output)?0:3;
         }
-        constexpr int delay=4096;
+        constexpr int delay=2048;
         std::vector<float> input(48000*4);
         for(size_t i=0;i<input.size();++i) input[i]=.1f*std::sin(float(i)*.037f)+.02f*std::sin(float(i)*.151f);
         auto unity=render(*p,input,128,false);
@@ -118,6 +161,29 @@ int main(int argc,char** argv) {
         auto restored=render(*p,input,512,false);
         err=0;for(size_t i=0;i<input.size();++i) err=std::max(err,std::abs(restored[i]-separated[i]));
         if(err>1e-5) throw std::runtime_error("State recall failure");
+
+        // Robustness testing for host state restoration (FL Studio / VST3 variations)
+        try {
+            // Test alternative root tag names
+            juce::String stateStr(static_cast<const char*>(saved.getData()), saved.getSize());
+            auto xml = juce::XmlDocument::parse(stateStr);
+            if (xml != nullptr) {
+                xml->setTagName("PARAMETERS");
+                auto s1 = xml->toString();
+                p->setStateInformation(s1.toRawUTF8(), (int)s1.getNumBytesAsUTF8());
+
+                xml->setTagName("AudioProcessorValueTreeState");
+                auto s2 = xml->toString();
+                p->setStateInformation(s2.toRawUTF8(), (int)s2.getNumBytesAsUTF8());
+            }
+            // Test empty / null / malformed states
+            p->setStateInformation(nullptr, 0);
+            p->setStateInformation(saved.getData(), 0);
+            const char* garbage = "<garbage>invalid</garbage>";
+            p->setStateInformation(garbage, (int)std::strlen(garbage));
+        } catch(...) {
+            throw std::runtime_error("State robustness test exception");
+        }
         parameter(*p,"bypass",1);auto bypass=render(*p,input,64,false);
         err=0;for(size_t i=delay;i<input.size();++i) err=std::max(err,std::abs(bypass[i]-input[i-delay]));
         if(err>1e-6) throw std::runtime_error("Bypass failure");
@@ -128,7 +194,71 @@ int main(int argc,char** argv) {
         std::cout<<"realtime_stereo_128 underruns="<<misses<<" max_vs_offline="<<err<<std::endl;
         if(misses || err>1e-5) throw std::runtime_error("Realtime deadline failure");
         p->releaseResources();
-        std::cout<<"PASS unity, reported latency, stereo, separation, blocks 64/128/512/777, state recall, bypass, realtime"<<std::endl;
+        std::cout<<"PASS 48 kHz: unity, reported latency, stereo, separation, blocks 64/128/512/777, state recall, bypass, realtime"<<std::endl;
+
+        // =====================================================================
+        // 44.1 kHz Validation Suite
+        // =====================================================================
+        p->prepareToPlay(44100.0, 128);
+        int delay44 = p->getLatencySamples();
+        std::cout << "44.1 kHz reported latency: " << delay44 << " samples" << std::endl;
+        if (delay44 != 1943) throw std::runtime_error("44.1 kHz latency mismatch (expected 1943)");
+
+        parameter(*p, "voice", 0);
+        parameter(*p, "noise", 0);
+        parameter(*p, "bypass", 0);
+
+        // 4 seconds of 1 kHz sine at 44.1 kHz
+        std::vector<float> input44(44100 * 4);
+        for (size_t i = 0; i < input44.size(); ++i) {
+            input44[i] = 0.5f * std::sin(float(2.0 * juce::MathConstants<double>::pi * 1000.0 * double(i) / 44100.0));
+        }
+
+        auto unity44 = render(*p, input44, 128, false, 44100.0);
+        float unityErr44 = 0;
+        for (size_t i = delay44 + 64; i < input44.size(); ++i) {
+            unityErr44 = std::max(unityErr44, std::abs(unity44[i] - input44[i - delay44]));
+        }
+        std::cout << "44.1 kHz unity max error vs delayed sine: " << unityErr44 << std::endl;
+        if (unityErr44 > 0.005f) throw std::runtime_error("44.1 kHz unity accuracy failure");
+
+        // Separation test at 44.1 kHz
+        parameter(*p, "noise", -50);
+        auto separated44 = render(*p, input44, 128, false, 44100.0);
+        auto other64_44  = render(*p, input44, 64,  false, 44100.0);
+        auto other512_44 = render(*p, input44, 512, false, 44100.0);
+        auto other777_44 = render(*p, input44, 777, false, 44100.0);
+
+        float change44 = 0;
+        for (size_t i = delay44; i < input44.size(); ++i) {
+            change44 += std::abs(separated44[i] - unity44[i]);
+        }
+        if (change44 < 1.0f) throw std::runtime_error("44.1 kHz separation failure");
+
+        // Block invariance at 44.1 kHz
+        float blockErr64 = 0, blockErr512 = 0, blockErr777 = 0;
+        for (size_t i = delay44; i < input44.size(); ++i) {
+            blockErr64  = std::max(blockErr64,  std::abs(separated44[i] - other64_44[i]));
+            blockErr512 = std::max(blockErr512, std::abs(separated44[i] - other512_44[i]));
+            blockErr777 = std::max(blockErr777, std::abs(separated44[i] - other777_44[i]));
+        }
+        std::cout << "44.1 kHz block diffs vs 128: 64=" << blockErr64 << " 512=" << blockErr512 << " 777=" << blockErr777 << std::endl;
+        if (blockErr64 > 1e-4f || blockErr512 > 1e-4f || blockErr777 > 1e-4f) {
+            throw std::runtime_error("44.1 kHz block invariance failure");
+        }
+
+        // Realtime deadline test at 44.1 kHz
+        auto live44 = render(*p, input44, 128, true, 44100.0);
+        auto misses44 = sexyUnderruns(p.get());
+        float liveErr44 = 0;
+        for (size_t i = delay44; i < input44.size(); ++i) {
+            liveErr44 = std::max(liveErr44, std::abs(live44[i] - separated44[i]));
+        }
+        std::cout << "44.1 kHz realtime_stereo_128 underruns=" << misses44 << " max_vs_offline=" << liveErr44 << std::endl;
+        if (misses44 || liveErr44 > 1e-4f) throw std::runtime_error("44.1 kHz realtime deadline failure");
+
+        p->releaseResources();
+        std::cout << "PASS 44.1 kHz: latency=1943, unity sine, separation, block invariance {64,128,512,777}, realtime" << std::endl;
         return 0;
     } catch(const std::exception& e) {std::cerr<<e.what()<<std::endl;return 1;}
 }

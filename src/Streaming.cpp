@@ -1,4 +1,6 @@
+#define _USE_MATH_DEFINES
 #include "Streaming.h"
+#include "Combinador.h"
 #include "BinaryData.h"
 #define ORT_API_MANUAL_INIT
 #include <onnxruntime_cxx_api.h>
@@ -26,12 +28,26 @@ using Tensors = std::map<std::string, Tensor>;
 Ort::Env& environment() {
     static const bool loaded=[] {
         HMODULE module=nullptr;
-        if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<LPCWSTR>(&environment),&module)) throw std::runtime_error("Module path unavailable");
-        wchar_t file[32768]{}; GetModuleFileNameW(module,file,32768);
-        std::wstring path(file); path=path.substr(0,path.find_last_of(L"\\/"))+L"\\onnxruntime.dll";
-        if(!LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS))
-            throw std::runtime_error("Missing ONNX Runtime next to plugin");
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&environment),&module);
+        wchar_t file[32768]{};
+        if(module) {
+            GetModuleFileNameW(module,file,32768);
+        } else {
+            GetModuleFileNameW(nullptr,file,32768);
+        }
+        std::wstring path(file);
+        auto pos=path.find_last_of(L"\\/");
+        if(pos!=std::wstring::npos) {
+            path=path.substr(0,pos)+L"\\onnxruntime.dll";
+        } else {
+            path=L"onnxruntime.dll";
+        }
+        HMODULE hOr=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+        if(!hOr) {
+            hOr=LoadLibraryW(L"onnxruntime.dll");
+        }
+        if(!hOr) throw std::runtime_error("Missing ONNX Runtime DLL next to module or application");
         Ort::InitApi();
         return true;
     }();
@@ -96,25 +112,31 @@ struct Graph {
         return out;
     }
 };
-constexpr double pi=3.14159265358979323846;
 }
 
 struct StreamChannel::Impl {
-    Graph dfEnc{BinaryData::df_enc_onnx,BinaryData::df_enc_onnxSize,true,256,2,2,108,"feat_spec"};
-    Graph dfDec{BinaryData::df_dec_onnx,BinaryData::df_dec_onnxSize,false,256,64,5,108,"c0"};
-    Graph erEnc{BinaryData::erb_enc_onnx,BinaryData::erb_enc_onnxSize,true,96,1,2,56,"feat_erb"};
-    Graph erDec{BinaryData::erb_dec_onnx,BinaryData::erb_dec_onnxSize,false,96};
-    juce::dsp::FFT dfFFT{10}, erFFT{8};
-    std::array<float,1024> input{},win{},tail{};
-    std::array<float,256> erInput{},erWin{};
+    Graph dfEnc{BinaryData::df_enc_onnx, BinaryData::df_enc_onnxSize, true, 256, 2, 2, 108, "feat_spec"};
+    Graph dfDec{BinaryData::df_dec_onnx, BinaryData::df_dec_onnxSize, false, 256, 64, 5, 108, "c0"};
+    Graph erEnc{BinaryData::erb_enc_onnx, BinaryData::erb_enc_onnxSize, true, 96, 1, 2, 56, "feat_erb"};
+    Graph erDec{BinaryData::erb_dec_onnx, BinaryData::erb_dec_onnxSize, false, 96};
+    juce::dsp::FFT dfFFT{10};
+    juce::dsp::FFT erFFT{8};
+    std::array<float,1024> input{};
+    std::array<float,256> erInput{};
+    std::array<float,1024> win{};
+    std::array<float,256> erWin{};
     std::array<double,108> norm{};
     std::array<std::array<std::complex<float>,513>,6> spectra{};
     std::array<float,56> mask{};
     std::array<int,56> widths{};
     std::array<int,513> bands{};
+    std::array<float,512> tail_d{};
+    std::array<float,512> tail_e{};
+    Combinador combinador;
+
     Impl() {
-        for(int i=0;i<1024;++i) win[i]=float(std::sin(pi/2*std::pow(std::sin(pi*(i+.5)/1024),2)));
-        for(int i=0;i<256;++i) erWin[i]=float(std::sin(pi/2*std::pow(std::sin(pi*(i+.5)/256),2)));
+        for(int i=0;i<1024;++i) win[i]=float(std::sin(M_PI/2*std::pow(std::sin(M_PI*(i+.5)/1024),2)));
+        for(int i=0;i<256;++i) erWin[i]=float(std::sin(M_PI/2*std::pow(std::sin(M_PI*(i+.5)/256),2)));
         for(int i=0;i<108;++i) norm[i]=.001+(.0001-.001)*i/107;
         double high=9.265*std::log1p(24000/(24.7*9.265)); int prev=0,over=0,sum=0;
         for(int i=1;i<=56;++i) {
@@ -130,9 +152,6 @@ struct StreamChannel::Impl {
         }
     }
     void process(const float* x,float* voice) {
-        // These four causal ERB frames are already available in this input hop.
-        // Run them as one sequence, preserving recurrent and convolution state.
-        // This reduces ONNX calls per hop from ten to four, without lookahead.
         Tensor erbFeature({1,1,4,56});
         for(int step=0;step<4;++step) {
             std::copy(erInput.begin()+128,erInput.end(),erInput.begin());
@@ -164,23 +183,65 @@ struct StreamChannel::Impl {
         }
         auto out=dfDec.run(dfEnc.run({{"feat_spec",std::move(feature)}}));
         auto& co=out.at("coefs").data;
+
+        std::array<float, 513> mask_ramp{};
+        int edge = 0;
+        for (int b = 0; b < 56; ++b) {
+            int lo = edge * 4;
+            int hi = std::min(513, (edge + widths[b]) * 4);
+            int w = hi - lo;
+            float m0 = mask[b];
+            float m1 = (b + 1 < 56) ? mask[b + 1] : m0;
+            float step = (w > 0) ? (m1 - m0) / float(w) : 0.0f;
+            for (int i = 0; i < w && (lo + i) < 513; ++i) {
+                mask_ramp[lo + i] = m0 + float(i) * step;
+            }
+            edge += widths[b];
+        }
+
+        std::array<float,2048> out_buf{};
         for(int f=0;f<513;++f) {
             std::complex<float> v{};
             if(f<108) {
+                std::complex<float> v_df{};
                 for(int k=0;k<8;++k) {
                     std::complex<float> s=k<6?spectra[k][f]:(k==6?spectra[5][f+1]:(f?spectra[5][f-1]:std::complex<float>{}));
-                    v+=s*std::complex<float>(co[(f*8+k)*2],co[(f*8+k)*2+1]);
+                    v_df+=s*std::complex<float>(co[(f*8+k)*2],co[(f*8+k)*2+1]);
                 }
-            } else v=spectra[5][f]*mask[bands[f]];
-            buf[2*f]=v.real()*1024; buf[2*f+1]=v.imag()*1024;
+                float freq = f * (48000.0f / 1024.0f);
+                float blend = std::clamp((freq - 2000.0f) / (5200.0f - 2000.0f), 0.0f, 1.0f);
+                float m = mask_ramp[f];
+                v = v_df * (1.0f - blend * (1.0f - m));
+            } else {
+                v = spectra[5][f] * mask_ramp[f];
+            }
+            out_buf[2*f]=v.real()*1024; out_buf[2*f+1]=v.imag()*1024;
         }
-        dfFFT.performRealOnlyInverseTransform(buf.data());
+
+        dfFFT.performRealOnlyInverseTransform(out_buf.data());
         for(int i=0;i<512;++i) {
-            voice[i]=tail[i]+buf[i]*win[i];
-            tail[i]=buf[i+512]*win[i+512];
+            voice[i]=tail_d[i]+out_buf[i]*win[i];
+            tail_d[i]=out_buf[i+512]*win[i+512];
         }
     }
 };
-StreamChannel::StreamChannel():p(std::make_unique<Impl>()){}
+StreamChannel::StreamChannel(){
+    (void)environment();
+    p = std::make_unique<Impl>();
+}
 StreamChannel::~StreamChannel()=default;
-void StreamChannel::process(const float* input,float* voice){p->process(input,voice);}
+void StreamChannel::reset(){
+    p->input.fill(0);p->erInput.fill(0);
+    for(int i=0;i<108;++i) p->norm[i]=.001+(.0001-.001)*i/107;
+    for(auto& s:p->spectra) s.fill(0);
+    p->mask.fill(0);p->tail_d.fill(0);p->tail_e.fill(0);
+    p->dfEnc.hidden.data.assign(p->dfEnc.hidden.data.size(),0);
+    if(p->dfEnc.channels) p->dfEnc.context.data.assign(p->dfEnc.context.data.size(),0);
+    p->dfDec.hidden.data.assign(p->dfDec.hidden.data.size(),0);
+    if(p->dfDec.channels) p->dfDec.context.data.assign(p->dfDec.context.data.size(),0);
+    p->erEnc.hidden.data.assign(p->erEnc.hidden.data.size(),0);
+    if(p->erEnc.channels) p->erEnc.context.data.assign(p->erEnc.context.data.size(),0);
+    p->erDec.hidden.data.assign(p->erDec.hidden.data.size(),0);
+    p->combinador.reset();
+}
+void StreamChannel::process(const float* x,float* voice){p->process(x,voice);}

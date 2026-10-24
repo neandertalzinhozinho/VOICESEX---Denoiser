@@ -9,6 +9,7 @@ public:
     StreamChannel();
     ~StreamChannel();
     void process(const float* input, float* voice);
+    void reset();
 private:
     struct Impl;
     std::unique_ptr<Impl> p;
