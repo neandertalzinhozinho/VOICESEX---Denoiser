@@ -33,8 +33,6 @@
   - **44.1 kHz Resampling:** High-precision, zero-allocation cubic Lagrange interpolation maintaining sub-sample phase accuracy (**1943 samples / 44.0 ms**).
 - **Bit-Perfect Complementarity:**
   - Strict preservation of the acoustic sum: `Voice + Noise ≈ Input` with mathematical precision (< 10⁻⁸ reconstruction error).
-- **Modern Dark UI:**
-  - Clean vector aesthetics with subtle neon depth, brushed metallic bezels, and instantaneous DAW parameter recall.
 
 ---
 
